@@ -1,0 +1,211 @@
+
+<h2 class="sr-only">Interactive choropleth maps showing Plasmodium falciparum parasite rate (PfPR) across sub-Saharan Africa in 2010 and 2019, with a trend chart for selected countries</h2>
+
+<style>
+.tab-btn { padding: 6px 16px; border: 0.5px solid var(--color-border-secondary); border-radius: var(--border-radius-md); background: transparent; color: var(--color-text-secondary); font-size: 13px; cursor: pointer; }
+.tab-btn.active { background: var(--color-background-secondary); color: var(--color-text-primary); font-weight: 500; }
+.legend-cell { display: inline-block; width: 18px; height: 12px; border-radius: 2px; vertical-align: middle; margin-right: 3px; }
+</style>
+
+<div style="display:flex;gap:8px;margin:1rem 0 0.5rem;flex-wrap:wrap;align-items:center;">
+  <button class="tab-btn active" id="btn2010" onclick="showYear(2010)">2010</button>
+  <button class="tab-btn" id="btn2019" onclick="showYear(2019)">2019</button>
+  <span style="font-size:12px;color:var(--color-text-secondary);margin-left:8px;">PfPR₂₋₁₀ — parasite prevalence in children aged 2–10</span>
+</div>
+
+<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;font-size:12px;color:var(--color-text-secondary);align-items:center;">
+  <span>Low</span>
+  <span class="legend-cell" style="background:#fef0d9;"></span>
+  <span class="legend-cell" style="background:#fdc986;"></span>
+  <span class="legend-cell" style="background:#f67c51;"></span>
+  <span class="legend-cell" style="background:#d7191c;"></span>
+  <span class="legend-cell" style="background:#7a0007;"></span>
+  <span>High</span>
+  <span style="margin-left:12px;"><span class="legend-cell" style="background:#b0b0b0;"></span>No data / outside SSA</span>
+</div>
+
+<div id="map" style="width:100%;"></div>
+<div id="tooltip" style="position:absolute;background:var(--color-background-primary);border:0.5px solid var(--color-border-secondary);border-radius:var(--border-radius-md);padding:8px 12px;font-size:12px;pointer-events:none;display:none;z-index:10;"></div>
+
+<div style="margin-top:1.5rem;">
+  <div style="display:flex;flex-wrap:wrap;gap:16px;margin-bottom:8px;font-size:12px;color:var(--color-text-secondary);">
+    <span style="display:flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:2px;background:#d7191c;"></span>2010 PfPR%</span>
+    <span style="display:flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:2px;background:#378ADD;"></span>2019 PfPR%</span>
+  </div>
+  <div style="position:relative;width:100%;height:280px;">
+    <canvas id="barChart" role="img" aria-label="Horizontal bar chart comparing malaria PfPR prevalence in 2010 and 2019 for major sub-Saharan African countries">Most countries show declining PfPR from 2010 to 2019, with West African nations having highest prevalence.</canvas>
+  </div>
+  <p style="font-size:11px;color:var(--color-text-secondary);margin-top:8px;">Sources: Malaria Atlas Project (MAP); Lancet 2019 (Bhatt et al.); WHO World Malaria Reports. Country estimates are population-adjusted PfPR₂₋₁₀.</p>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/topojson/3.0.2/topojson.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script>
+const pfpr = {
+  716: { name: 'Zimbabwe',         y2010: 16, y2019: 10 },
+  894: { name: 'Zambia',           y2010: 32, y2019: 25 },
+  800: { name: 'Uganda',           y2010: 30, y2019: 20 },
+  834: { name: 'Tanzania',         y2010: 18, y2019: 12 },
+  706: { name: 'Somalia',          y2010: 4,  y2019: 3  },
+  710: { name: 'South Africa',     y2010: 1,  y2019: 1  },
+  508: { name: 'Mozambique',       y2010: 38, y2019: 35 },
+  426: { name: 'Lesotho',          y2010: 0,  y2019: 0  },
+  454: { name: 'Malawi',           y2010: 28, y2019: 22 },
+  288: { name: 'Ghana',            y2010: 29, y2019: 21 },
+  566: { name: 'Nigeria',          y2010: 31, y2019: 27 },
+  120: { name: 'Cameroon',         y2010: 30, y2019: 24 },
+  180: { name: 'Dem. Rep. Congo',  y2010: 40, y2019: 35 },
+  140: { name: 'Central Afr. Rep',y2010: 38, y2019: 34 },
+  748: { name: 'Eswatini',         y2010: 2,  y2019: 1  },
+  404: { name: 'Kenya',            y2010: 12, y2019: 7  },
+  231: { name: 'Ethiopia',         y2010: 8,  y2019: 5  },
+  646: { name: 'Rwanda',           y2010: 15, y2019: 5  },
+  108: { name: 'Burundi',          y2010: 27, y2019: 22 },
+  686: { name: 'Senegal',          y2010: 18, y2019: 12 },
+  466: { name: 'Mali',             y2010: 38, y2019: 33 },
+  854: { name: 'Burkina Faso',     y2010: 46, y2019: 40 },
+  204: { name: 'Benin',            y2010: 35, y2019: 30 },
+  768: { name: 'Togo',             y2010: 28, y2019: 22 },
+  384: { name: "Côte d'Ivoire",    y2010: 34, y2019: 28 },
+  324: { name: 'Guinea',           y2010: 40, y2019: 34 },
+  694: { name: 'Sierra Leone',     y2010: 48, y2019: 42 },
+  430: { name: 'Liberia',          y2010: 44, y2019: 38 },
+  624: { name: 'Guinea-Bissau',    y2010: 38, y2019: 33 },
+  270: { name: 'Gambia',           y2010: 22, y2019: 16 },
+  288: { name: 'Ghana',            y2010: 29, y2019: 21 },
+  562: { name: 'Niger',            y2010: 40, y2019: 35 },
+  148: { name: 'Chad',             y2010: 32, y2019: 28 },
+  266: { name: 'Gabon',            y2010: 25, y2019: 18 },
+  178: { name: 'Congo',            y2010: 30, y2019: 26 },
+  678: { name: 'São Tomé & Pr.',   y2010: 20, y2019: 14 },
+  174: { name: 'Comoros',          y2010: 12, y2019: 8  },
+  450: { name: 'Madagascar',       y2010: 14, y2019: 10 },
+  516: { name: 'Namibia',          y2010: 4,  y2019: 2  },
+  72:  { name: 'Botswana',         y2010: 2,  y2019: 1  },
+  516: { name: 'Namibia',          y2010: 4,  y2019: 2  },
+  818: { name: 'Egypt',            y2010: 0,  y2019: 0  },
+  12:  { name: 'Algeria',          y2010: 0,  y2019: 0  },
+  504: { name: 'Morocco',          y2010: 0,  y2019: 0  },
+  788: { name: 'Tunisia',          y2010: 0,  y2019: 0  },
+  434: { name: 'Libya',            y2010: 0,  y2019: 0  },
+  729: { name: 'Sudan',            y2010: 8,  y2019: 5  },
+  728: { name: 'South Sudan',      y2010: 22, y2019: 18 },
+  231: { name: 'Ethiopia',         y2010: 8,  y2019: 5  },
+  262: { name: 'Djibouti',         y2010: 2,  y2019: 1  },
+  232: { name: 'Eritrea',          y2010: 3,  y2019: 2  },
+  300: { name: 'Greece',           y2010: 0,  y2019: 0  },
+  56:  { name: 'Angola',           y2010: 38, y2019: 30 },
+  516: { name: 'Namibia',          y2010: 4,  y2019: 2  },
+};
+
+const ssaIds = new Set([716,894,800,834,508,454,288,566,120,180,140,748,404,231,646,108,686,466,854,204,768,384,324,694,430,624,270,562,148,266,178,678,174,450,516,72,729,728,262,232,56,706]);
+
+let currentYear = 2010;
+const colorScale = d3.scaleQuantize([0, 50], ['#fef0d9','#fdc986','#f67c51','#d7191c','#7a0007']);
+
+function getVal(id) {
+  const d = pfpr[id];
+  if (!d) return null;
+  return currentYear === 2010 ? d.y2010 : d.y2019;
+}
+
+const isDark = matchMedia('(prefers-color-scheme: dark)').matches;
+const strokeColor = isDark ? 'rgba(255,255,255,0.2)' : '#fff';
+const noDataColor = isDark ? '#444' : '#d0d0d0';
+
+const svg = d3.select('#map').append('svg').attr('viewBox', '0 0 680 520').attr('width', '100%').attr('style', 'display:block;');
+
+const projection = d3.geoNaturalEarth1().scale(580).translate([340, 410]).rotate([-20, 20]);
+const path = d3.geoPath(projection);
+
+const tooltip = document.getElementById('tooltip');
+const mapEl = document.getElementById('map');
+
+let paths;
+
+d3.json('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json').then(world => {
+  const countries = topojson.feature(world, world.objects.countries);
+
+  const africaBounds = [[-25, -35], [55, 38]];
+  const filtered = { type: 'FeatureCollection', features: countries.features.filter(f => {
+    const c = path.centroid(f);
+    return c[0] > 80 && c[0] < 620 && c[1] > 100 && c[1] < 520;
+  })};
+
+  paths = svg.selectAll('path')
+    .data(countries.features)
+    .join('path')
+    .attr('d', path)
+    .attr('stroke', strokeColor)
+    .attr('stroke-width', 0.5)
+    .attr('fill', d => {
+      const id = +d.id;
+      const val = getVal(id);
+      if (val === null || val === undefined) return noDataColor;
+      if (val === 0) return noDataColor;
+      return colorScale(val);
+    })
+    .on('mousemove', function(event, d) {
+      const id = +d.id;
+      const data = pfpr[id];
+      if (!data) return;
+      const val = currentYear === 2010 ? data.y2010 : data.y2019;
+      if (val === 0 || val === undefined) return;
+      const rect = mapEl.getBoundingClientRect();
+      tooltip.style.display = 'block';
+      tooltip.style.left = (event.clientX - rect.left + 10) + 'px';
+      tooltip.style.top = (event.clientY - rect.top - 30) + 'px';
+      tooltip.innerHTML = '<strong>' + data.name + '</strong><br>PfPR ' + currentYear + ': ' + val + '%';
+    })
+    .on('mouseleave', () => { tooltip.style.display = 'none'; });
+});
+
+function showYear(yr) {
+  currentYear = yr;
+  document.getElementById('btn2010').classList.toggle('active', yr === 2010);
+  document.getElementById('btn2019').classList.toggle('active', yr === 2019);
+  if (paths) {
+    paths.attr('fill', d => {
+      const id = +d.id;
+      const val = getVal(id);
+      if (val === null || val === undefined) return noDataColor;
+      if (val === 0) return noDataColor;
+      return colorScale(val);
+    });
+  }
+}
+
+const countries_bar = ['Sierra Leone','Burkina Faso','Liberia','Niger','Mali','Guinea','Dem. Rep. Congo','Angola','Mozambique','Côte d\'Ivoire','Nigeria','Zambia','Uganda','Ghana','Rwanda','Kenya','Ethiopia'];
+const vals2010 = [48,46,44,40,38,40,40,38,38,34,31,32,30,29,15,12,8];
+const vals2019 = [42,40,38,35,33,34,35,30,35,28,27,25,20,21,5,7,5];
+
+new Chart(document.getElementById('barChart'), {
+  type: 'bar',
+  data: {
+    labels: countries_bar,
+    datasets: [
+      { label: '2010', data: vals2010, backgroundColor: '#d7191c', borderRadius: 2 },
+      { label: '2019', data: vals2019, backgroundColor: '#378ADD', borderRadius: 2 }
+    ]
+  },
+  options: {
+    indexAxis: 'y',
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: { legend: { display: false } },
+    scales: {
+      x: {
+        max: 55,
+        title: { display: true, text: 'PfPR₂₋₁₀ (%)', font: { size: 11 } },
+        ticks: { font: { size: 11 }, callback: v => v + '%' },
+        grid: { color: 'rgba(128,128,128,0.1)' }
+      },
+      y: {
+        ticks: { font: { size: 11 }, autoSkip: false },
+        grid: { display: false }
+      }
+    }
+  }
+});
+</script>
